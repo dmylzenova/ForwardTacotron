@@ -1,14 +1,20 @@
 from torch.utils.data.sampler import Sampler
 from torch.utils.data import Dataset, DataLoader
 from typing import List, Dict
-
+import sys
+sys.path.append("..")
 from utils.dsp import *
 from utils import hparams as hp
 from utils.files import unpickle_binary
 from utils.text import text_to_sequence
+from utils.text.symbols import phonemes
 from pathlib import Path
 import random
 
+PUNCTUATION_INDICES = np.arange(1, 10)
+# print(phonemes[10])
+# phonemes = np.array(phonemes)
+# print(phonemes[PUNCTUATION_INDICES])
 
 ###################################################################################
 # WaveRNN/Vocoder Dataset #########################################################
@@ -179,6 +185,10 @@ class TacoDataset(Dataset):
         item_id = self.metadata[index]
         text = self.text_dict[item_id]
         x = text_to_sequence(text)
+        x = np.array([ch for ch in x if ch not in PUNCTUATION_INDICES])
+
+        x = np.stack([x, np.zeros_like(x)])
+
         mel = np.load(str(self.path/'mel'/f'{item_id}.npy'))
         mel_len = mel.shape[-1]
         return x, mel, item_id, mel_len
@@ -198,6 +208,32 @@ class ForwardDataset(Dataset):
         item_id = self.metadata[index]
         text = self.text_dict[item_id]
         x = text_to_sequence(text)
+        x = np.array(x)
+
+        pad_idx = 10
+        punc_level = np.full_like(x, pad_idx)
+        new_x = []
+        in_quote = False
+        for i, ph_idx in enumerate(x[::-1]):
+            if ph_idx in PUNCTUATION_INDICES:
+                punc_level[: len(x) - i] = ph_idx
+            if ph_idx == 3: # closing bracket
+                punc_level[: len(x) - i] = pad_idx
+            if ph_idx == 2:
+                if in_quote:
+                    punc_level[: len(x) - i] = pad_idx
+                else:
+                    in_quote = True
+            # if ph_idx not in PUNCTUATION_INDICES:
+            else:
+                new_x.append(ph_idx)
+        new_x = np.array(new_x[::-1])
+        x = np.stack([new_x, punc_level])
+
+        # print("!" * 100)
+        # print("LENS", len(punc_level), len(new_x))
+        # print(new_x)
+        # print(punc_level)
         mel = np.load(str(self.path/'mel'/f'{item_id}.npy'))
         mel_len = mel.shape[-1]
         dur = np.load(str(self.path/'alg'/f'{item_id}.npy'))
@@ -216,11 +252,40 @@ def pad2d(x, max_len):
     return np.pad(x, ((0, 0), (0, max_len - x.shape[-1])), constant_values=-11.5129, mode='constant')
 
 
+# def collate_tts(batch, r):
+#     x_lens = [len(x[0]) for x in batch]
+#     max_x_len = max(x_lens)
+#     chars = [pad1d(x[0], max_x_len) for x in batch]
+#     chars = np.stack(chars)
+#     spec_lens = [x[1].shape[-1] for x in batch]
+#     max_spec_len = max(spec_lens) + 1
+#     if max_spec_len % r != 0:
+#         max_spec_len += r - max_spec_len % r
+#     mel = [pad2d(x[1], max_spec_len) for x in batch]
+#     mel = np.stack(mel)
+#     ids = [x[2] for x in batch]
+#     mel_lens = [x[3] for x in batch]
+#     x_lens = torch.tensor(x_lens)
+#     mel_lens = torch.tensor(mel_lens)
+#     chars = torch.tensor(chars).long()
+#     mel = torch.tensor(mel)
+#     # additional durations for forward
+#     if len(batch[0]) > 4:
+#         dur = [pad1d(x[4][:max_x_len], max_x_len) for x in batch]
+#         dur = np.stack(dur)
+#         dur = torch.tensor(dur).float()
+#         pitch = [pad1d(x[5][:max_x_len], max_x_len) for x in batch]
+#         pitch = np.stack(pitch)
+#         pitch = torch.tensor(pitch).float()
+#         return chars, mel, ids, x_lens, mel_lens, dur, pitch
+#     else:
+#         return chars, mel, ids, x_lens, mel_lens
+
 def collate_tts(batch, r):
-    x_lens = [len(x[0]) for x in batch]
+    x_lens = [len(x[0][0]) for x in batch]
     max_x_len = max(x_lens)
-    chars = [pad1d(x[0], max_x_len) for x in batch]
-    chars = np.stack(chars)
+    chars = np.stack([pad1d(x[0][0], max_x_len) for x in batch])
+    puncts = np.stack([pad1d(x[0][1], max_x_len) for x in batch])
     spec_lens = [x[1].shape[-1] for x in batch]
     max_spec_len = max(spec_lens) + 1
     if max_spec_len % r != 0:
@@ -232,7 +297,12 @@ def collate_tts(batch, r):
     x_lens = torch.tensor(x_lens)
     mel_lens = torch.tensor(mel_lens)
     chars = torch.tensor(chars).long()
+    puncts = torch.tensor(puncts).long()
     mel = torch.tensor(mel)
+    # print()
+    # print(chars)
+    # print(puncts)
+    # print("="*10)
     # additional durations for forward
     if len(batch[0]) > 4:
         dur = [pad1d(x[4][:max_x_len], max_x_len) for x in batch]
@@ -241,8 +311,10 @@ def collate_tts(batch, r):
         pitch = [pad1d(x[5][:max_x_len], max_x_len) for x in batch]
         pitch = np.stack(pitch)
         pitch = torch.tensor(pitch).float()
+        # return chars, mel, ids, x_lens, mel_lens, dur, pitch, puncts
         return chars, mel, ids, x_lens, mel_lens, dur, pitch
     else:
+        # return chars, mel, ids, x_lens, mel_lens, puncts
         return chars, mel, ids, x_lens, mel_lens
 
 

@@ -7,8 +7,8 @@ The default is a set of ASCII characters that works well for English or text tha
 from utils.text import cmudict
 
 _pad = '_'
-_punctuation = '!\'(),.:;? '
-_special = '-'
+_punctuation = '!"(),.:;?%\''
+_special = ' -'
 
 # Prepend "@" to ARPAbet symbols to ensure uniqueness (some are the same as uppercase letters):
 _arpabet = ['@' + s for s in cmudict.valid_symbols]
@@ -21,7 +21,12 @@ _suprasegmentals = 'ˈˌːˑ'
 _other_symbols = 'ʍwɥʜʢʡɕʑɺɧ'
 _diacrilics = 'ɚ˞ɫ'
 
-phonemes = sorted(list(
+
+# phonemes = sorted(list(
+#    _pad + _special + _vowels + _non_pulmonic_consonants
+#    + _pulmonic_consonants + _suprasegmentals + _other_symbols + _diacrilics))
+
+phonemes = (list(
    _pad + _punctuation + _special + _vowels + _non_pulmonic_consonants
    + _pulmonic_consonants + _suprasegmentals + _other_symbols + _diacrilics))
 

@@ -54,22 +54,31 @@ class ForwardTrainer:
         pitch_loss_avg = Averager()
         device = next(model.parameters()).device  # use same device as model parameters
         for e in range(1, epochs + 1):
-            for i, (x, m, ids, x_lens, mel_lens, dur, pitch) in enumerate(session.train_set, 1):
-
+            for i, (x, m, ids, x_lens, mel_lens, dur, pitch, puncts) in enumerate(
+                session.train_set, 1
+            ):
                 start = time.time()
                 model.train()
-                x, m, dur, x_lens, mel_lens, pitch = x.to(device), m.to(device), dur.to(device),\
-                                                     x_lens.to(device), mel_lens.to(device), pitch.to(device)
-
-                m1_hat, m2_hat, dur_hat, pitch_hat = model(x, m, dur, mel_lens, pitch)
-
+                x, m, dur, x_lens, mel_lens, pitch, puncts = (
+                    x.to(device),
+                    m.to(device),
+                    dur.to(device),
+                    x_lens.to(device),
+                    mel_lens.to(device),
+                    pitch.to(device),
+                    puncts.to(device),
+                )
+                # print("*" * 20)
+                # print(x)
+                # print("*" * 20)
+                m1_hat, m2_hat, dur_hat, pitch_hat = model(
+                    x, m, dur, mel_lens, pitch, puncts
+                )
                 m1_loss = self.l1_loss(m1_hat, m, mel_lens)
                 m2_loss = self.l1_loss(m2_hat, m, mel_lens)
-
                 dur_loss = self.l1_loss(dur_hat.unsqueeze(1), dur.unsqueeze(1), x_lens)
                 pitch_loss = self.l1_loss(pitch_hat, pitch.unsqueeze(1), x_lens)
-
-                loss = m1_loss + m2_loss + 0.1 * dur_loss + 0.1 * pitch_loss
+                loss = m1_loss + m2_loss + 0.3 * dur_loss + 0.1 * pitch_loss
                 optimizer.zero_grad()
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), hp.tts_clip_grad_norm)
@@ -120,11 +129,22 @@ class ForwardTrainer:
         dur_val_loss = 0
         pitch_val_loss = 0
         device = next(model.parameters()).device
-        for i, (x, m, ids, x_lens, mel_lens, dur, pitch) in enumerate(val_set, 1):
-            x, m, dur, x_lens, mel_lens, pitch = x.to(device), m.to(device), dur.to(device), \
-                                                 x_lens.to(device), mel_lens.to(device), pitch.to(device)
+        for i, (x, m, ids, x_lens, mel_lens, dur, pitch, puncts) in enumerate(
+            val_set, 1
+        ):
+            x, m, dur, x_lens, mel_lens, pitch, puncts = (
+                x.to(device),
+                m.to(device),
+                dur.to(device),
+                x_lens.to(device),
+                mel_lens.to(device),
+                pitch.to(device),
+                puncts.to(device),
+            )
             with torch.no_grad():
-                m1_hat, m2_hat, dur_hat, pitch_hat = model(x, m, dur, mel_lens, pitch)
+                m1_hat, m2_hat, dur_hat, pitch_hat = model(
+                    x, m, dur, mel_lens, pitch, puncts
+                )
                 m1_loss = self.l1_loss(m1_hat, m, mel_lens)
                 m2_loss = self.l1_loss(m2_hat, m, mel_lens)
                 dur_loss = self.l1_loss(dur_hat.unsqueeze(1), dur.unsqueeze(1), x_lens)
@@ -140,10 +160,16 @@ class ForwardTrainer:
     def generate_plots(self, model: ForwardTacotron, session: TTSSession) -> None:
         model.eval()
         device = next(model.parameters()).device
-        x, m, ids, x_lens, mel_lens, dur, pitch = session.val_sample
-        x, m, dur, mel_lens, pitch = x.to(device), m.to(device), dur.to(device), mel_lens.to(device), pitch.to(device)
-
-        m1_hat, m2_hat, dur_hat, pitch_hat = model(x, m, dur, mel_lens, pitch)
+        x, m, ids, x_lens, mel_lens, dur, pitch, puncts = session.val_sample
+        x, m, dur, mel_lens, pitch, puncts = (
+            x.to(device),
+            m.to(device),
+            dur.to(device),
+            mel_lens.to(device),
+            pitch.to(device),
+            puncts.to(device),
+        )
+        m1_hat, m2_hat, dur_hat, pitch_hat = model(x, m, dur, mel_lens, pitch, puncts)
         m1_hat = np_now(m1_hat)[0, :600, :]
         m2_hat = np_now(m2_hat)[0, :600, :]
         m = np_now(m)[0, :600, :]

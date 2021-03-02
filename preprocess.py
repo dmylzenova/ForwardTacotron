@@ -7,7 +7,7 @@ from typing import Tuple, Dict
 
 from utils.display import *
 from utils.dsp import *
-from utils.files import get_files, pickle_binary
+from utils.files import get_files, pickle_binary, unpickle_binary
 from utils.paths import Paths
 from utils.text import clean_text
 from utils.text.recipes import ljspeech
@@ -102,10 +102,22 @@ if __name__ == '__main__':
     cleaned_texts = []
     preprocessor = Preprocessor(paths, text_dict)
 
+    # Upsample punctuation
+    end_idx = unpickle_binary('../../LJSpeech-1.1/ending_idx.pkl')
+    bracket_idx = unpickle_binary('../../LJSpeech-1.1/bracket_idx.pkl')
     for i, (item_id, length, cleaned_text) in enumerate(pool.imap_unordered(preprocessor, wav_files), 1):
         if item_id in text_dict:
-            dataset += [(item_id, length)]
-            cleaned_texts += [(item_id, cleaned_text)]
+            if item_id in end_idx:
+                for _ in range(15):
+                    dataset += [(item_id, length)]
+                    cleaned_texts += [(item_id, cleaned_text)]
+            elif item_id in  bracket_idx:
+                for _ in range(7):
+                    dataset += [(item_id, length)]
+                    cleaned_texts += [(item_id, cleaned_text)]
+            else:
+                dataset += [(item_id, length)]
+                cleaned_texts += [(item_id, cleaned_text)]
         bar = progbar(i, len(wav_files))
         message = f'{bar} {i}/{len(wav_files)} '
         stream(message)

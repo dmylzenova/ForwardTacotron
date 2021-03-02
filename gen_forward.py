@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 
 from models.fatchord_version import WaveRNN
 from models.forward_tacotron import ForwardTacotron
@@ -9,6 +10,9 @@ import argparse
 from utils.text import text_to_sequence, clean_text
 from utils.display import simple_table
 from utils.dsp import reconstruct_waveform, save_wav
+
+PUNCTUATION_INDICES = np.arange(1, 10)
+
 
 if __name__ == '__main__':
 
@@ -154,7 +158,30 @@ if __name__ == '__main__':
     for i, x in enumerate(inputs, 1):
 
         print(f'\n| Generating {i}/{len(inputs)}')
-        _, m, dur, pitch = tts_model.generate(x, alpha=args.alpha, pitch_function=pitch_function)
+        pad_idx = 10
+        punc_level = np.full_like(x, pad_idx)
+        new_x = []
+        in_quote = False
+        for i, ph_idx in enumerate(x[::-1]):
+            if ph_idx in PUNCTUATION_INDICES:
+                punc_level[: len(x) - i] = ph_idx
+            if ph_idx == 3: # closing bracket
+                punc_level[: len(x) - i] = pad_idx
+            if ph_idx == 2:
+                if in_quote:
+                    punc_level[: len(x) - i] = pad_idx
+                else:
+                    in_quote = True
+            # if ph_idx not in PUNCTUATION_INDICES:
+            # else:
+            new_x.append(ph_idx)
+        x = np.array(new_x[::-1])
+        print("x", x)
+        print("puncts", punc_level)
+
+        _, m, dur, pitch = tts_model.generate(
+            x, punc_level, alpha=args.alpha, pitch_function=pitch_function
+        )
 
         if args.vocoder == 'griffinlim':
             v_type = args.vocoder
@@ -174,6 +201,7 @@ if __name__ == '__main__':
         if args.vocoder == 'melgan':
             m = torch.tensor(m).unsqueeze(0)
             torch.save(m, paths.forward_output/f'{i}_{tts_k}_alpha{args.alpha}_amp{args.amp}.mel')
+            print(f'Saved to {paths.forward_output}/{i}_{tts_k}_alpha{args.alpha}_amp{args.amp}.mel')
         elif args.vocoder == 'griffinlim':
             wav = reconstruct_waveform(m, n_iter=args.iters)
             save_wav(wav, save_path)
