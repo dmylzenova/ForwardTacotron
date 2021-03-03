@@ -11,8 +11,10 @@ from utils.text import text_to_sequence, clean_text
 from utils.display import simple_table
 from utils.dsp import reconstruct_waveform, save_wav
 
-PUNCTUATION_INDICES = np.arange(1, 10)
+PUNCTUATION_INDICES = np.arange(1, 11)
+PUNCT_PAD_IDX = 11
 
+print(np.array(phonemes)[PUNCTUATION_INDICES])
 
 if __name__ == '__main__':
 
@@ -158,24 +160,90 @@ if __name__ == '__main__':
     for i, x in enumerate(inputs, 1):
 
         print(f'\n| Generating {i}/{len(inputs)}')
-        pad_idx = 10
-        punc_level = np.full_like(x, pad_idx)
-        new_x = []
+
+        punc_level, new_x = [], []
         in_quote = False
+        prev_punct = current_punct = PUNCT_PAD_IDX
         for i, ph_idx in enumerate(x[::-1]):
-            if ph_idx in PUNCTUATION_INDICES:
-                punc_level[: len(x) - i] = ph_idx
-            if ph_idx == 3: # closing bracket
-                punc_level[: len(x) - i] = pad_idx
-            if ph_idx == 2:
-                if in_quote:
-                    punc_level[: len(x) - i] = pad_idx
+            if ph_idx not in PUNCTUATION_INDICES:
+                new_x.append(ph_idx)
+                punc_level.append(current_punct)
+            else:
+                if ph_idx == 2:
+                    if in_quote:
+                        current_punct = prev_punct
+                    else:
+                        in_quote = True
+                        prev_punct, current_punct = current_punct, ph_idx
+                elif ph_idx == 3:
+                    current_punct = prev_punct
                 else:
-                    in_quote = True
-            # if ph_idx not in PUNCTUATION_INDICES:
-            # else:
-            new_x.append(ph_idx)
+                    prev_punct, current_punct = current_punct, ph_idx
+
         x = np.array(new_x[::-1])
+        punc_level = punc_level[::-1]
+
+
+        # bugged version
+        # for i, ph_idx in enumerate(x):
+        #     if ph_idx == 3:
+        #         punc_level.append(ph_idx)
+        #         prev_i = i
+        #     elif ph_idx == 2:
+        #         if in_quote:
+        #             # punc_level[prev_i: i] = ph_idx
+        #             if i - prev_i == 1:
+        #                 punc_level[-1] = ph_idx
+        #             else:
+        #                 punc_level.extend([ph_idx for _ in range(i - prev_i - 1)])
+        #         else:
+        #             in_quote = True
+        #             if i - prev_i > 1:
+        #                 punc_level.extend([pad_idx for _ in range(i - prev_i - 1)])
+        #         prev_i = i
+        #     elif ph_idx in PUNCTUATION_INDICES:
+        #         if i - prev_i == 1:
+        #             punc_level[-1] = ph_idx
+        #         else:
+        #             punc_level.extend([ph_idx for _ in range(i - prev_i - 1)])
+        #         prev_i = i
+        #     else:
+        #         new_x.append(ph_idx)
+        # padding version
+        # for i, ph_idx in enumerate(x):
+        #     if ph_idx == 3:
+        #         punc_level[i] = ph_idx
+        #         prev_i = i
+        #     elif ph_idx == 2:
+        #         if in_quote:
+        #             punc_level[prev_i + 1: i + 1] = ph_idx
+        #         else:
+        #             in_quote = True
+        #     elif ph_idx in PUNCTUATION_INDICES:
+        #         punc_level[prev_i + 1: i + 1] = ph_idx
+        #         prev_i = i
+        #     else:
+        #         new_x.append(ph_idx)
+        # new_x = np.array(new_x)
+        # x = np.pad(new_x, (0, len(x) - len(new_x)), mode='constant')
+
+        # reverse version
+        # for i, ph_idx in enumerate(x[::-1]):
+        #     if ph_idx in PUNCTUATION_INDICES:
+        #         punc_level[: len(x) - i] = ph_idx
+        #     if ph_idx == 3: # closing bracket , ... eh maybe openning
+        #         punc_level[: len(x) - i] = pad_idx
+        #     if ph_idx == 2:
+        #         if in_quote:
+        #             punc_level[: len(x) - i] = pad_idx
+        #         else:
+        #             in_quote = True
+        #     # if ph_idx not in PUNCTUATION_INDICES:
+        #     # else:
+        #     new_x.append(ph_idx)
+        # x = np.array(new_x[::-1])
+
+
         print("x", x)
         print("puncts", punc_level)
 

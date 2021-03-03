@@ -195,8 +195,11 @@ class ForwardTrainer:
         self.writer.add_audio(
             tag='Ground_Truth_Aligned/postnet_wav', snd_tensor=m2_hat_wav,
             global_step=model.step, sample_rate=hp.sample_rate)
+        
+        m1_hat, m2_hat, dur_hat, pitch_hat = model.generate(
+            x[0, : x_lens[0]].tolist(), puncts[0, : x_lens[0]].tolist()
+        )
 
-        m1_hat, m2_hat, dur_hat, pitch_hat = model.generate(x[0, :x_lens[0]].tolist())
         m1_hat_fig = plot_mel(m1_hat)
         m2_hat_fig = plot_mel(m2_hat)
 
